@@ -207,4 +207,88 @@ class DashboardController extends Controller
         // Limitamos a los 5 orígenes más fuertes para no saturar el gráfico
         return response()->json($qPagos->groupBy('origenes_venta.nombre')->orderByDesc('total')->limit(5)->get(), 200);
     }
+
+    // Gráfico de Barras: Top Cursos con más alumnos
+    public function cursosTop(Request $request)
+    {
+        $periodoId = $request->query('periodo_id');
+        $categoriaId = $request->query('categoria_id');
+        $eventoId = $request->query('evento_id');
+
+        $qEventos = DB::table('eventos')
+            ->join('cursos', 'eventos.curso_id', '=', 'cursos.id')
+            ->select('cursos.nombre as curso', DB::raw('SUM(eventos.stock_vendido) as total_alumnos'))
+            ->where('eventos.estado', 'ABIERTO');
+
+        if ($periodoId) { $qEventos->where('eventos.periodo_id', $periodoId); }
+        if ($categoriaId) { $qEventos->where('cursos.categoria_id', $categoriaId); }
+        if ($eventoId) { $qEventos->where('eventos.id', $eventoId); }
+
+        return response()->json($qEventos->groupBy('cursos.nombre')->orderByDesc('total_alumnos')->limit(5)->get(), 200);
+    }
+
+    // Barras de Progreso: Tasa de Ocupación (Vendido vs Aforo Máximo)
+    public function cursosOcupacion(Request $request)
+    {
+        $periodoId = $request->query('periodo_id');
+        $categoriaId = $request->query('categoria_id');
+        $eventoId = $request->query('evento_id');
+
+        $qEventos = DB::table('eventos')
+            ->join('cursos', 'eventos.curso_id', '=', 'cursos.id')
+            ->select(
+                'cursos.nombre as curso', 
+                DB::raw('SUM(eventos.stock_vendido) as inscritos'),
+                DB::raw('SUM(eventos.stock_maximo) as aforo_total')
+            )
+            ->where('eventos.estado', 'ABIERTO');
+
+        if ($periodoId) { $qEventos->where('eventos.periodo_id', $periodoId); }
+        if ($categoriaId) { $qEventos->where('cursos.categoria_id', $categoriaId); }
+        if ($eventoId) { $qEventos->where('eventos.id', $eventoId); }
+
+        // Calculamos solo eventos que tengan aforo configurado (> 0)
+        return response()->json($qEventos->groupBy('cursos.nombre')->havingRaw('aforo_total > 0')->orderByDesc('inscritos')->limit(5)->get(), 200);
+    }
+
+    // Gráfico de Barras: Top 5 Distritos de los alumnos
+    public function clientesPorDistrito(Request $request)
+    {
+        $periodoId = $request->query('periodo_id');
+
+        $qClientes = DB::table('clientes')
+            ->join('distritos', 'clientes.distrito_id', '=', 'distritos.id')
+            ->select('distritos.nombre as distrito', DB::raw('COUNT(clientes.id) as total'))
+            ->whereNotNull('clientes.distrito_id');
+
+        if ($periodoId) {
+            $periodo = DB::table('periodos')->where('id', $periodoId)->first();
+            if ($periodo) {
+                $qClientes->whereBetween('clientes.fecha_registro', [$periodo->fecha_inicio . ' 00:00:00', $periodo->fecha_fin . ' 23:59:59']);
+            }
+        }
+
+        return response()->json($qClientes->groupBy('distritos.nombre')->orderByDesc('total')->limit(5)->get(), 200);
+    }
+
+    // Gráfico de Área: Evolución de nuevos alumnos en el año
+    public function clientesEvolucion(Request $request)
+    {
+        $qClientes = DB::table('clientes')
+            ->select(DB::raw('MONTH(fecha_registro) as mes_num'), DB::raw('COUNT(id) as total'))
+            ->whereYear('fecha_registro', date('Y'))
+            ->groupBy('mes_num')
+            ->orderBy('mes_num')
+            ->get();
+
+        $formateado = $qClientes->map(function ($item) {
+            $nombresMeses = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+            return [
+                'mes' => $nombresMeses[$item->mes_num],
+                'total' => (int) $item->total
+            ];
+        });
+
+        return response()->json($formateado, 200);
+    }
 }
