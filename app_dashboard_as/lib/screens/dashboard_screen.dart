@@ -272,19 +272,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           eventoId: _filtroEventoId,
         );
       case 2:
-        return Center(
-          child: Text(
-            'Gráfico de Barras de Cursos (En construcción)',
-            style: TextStyle(color: AppTheme.textMuted),
-          ),
+        return _VistaCursos(
+          periodoId: _filtroPeriodoId,
+          categoriaId: _filtroCategoriaId,
+          eventoId: _filtroEventoId,
         );
       case 3:
-        return Center(
-          child: Text(
-            'Gráfico Circular de Clientes (En construcción)',
-            style: TextStyle(color: AppTheme.textMuted),
-          ),
-        );
+        return _VistaClientes(periodoId: _filtroPeriodoId);
       default:
         return _VistaResumen(
           periodoId: _filtroPeriodoId,
@@ -978,6 +972,623 @@ class __VistaVentasState extends State<_VistaVentas> {
           ),
           child: Center(
             child: Text(mensaje, style: TextStyle(color: AppTheme.textMuted)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// Sub-widget para la vista de Rendimiento de Cursos
+class _VistaCursos extends StatefulWidget {
+  final int? periodoId;
+  final int? categoriaId;
+  final int? eventoId;
+
+  const _VistaCursos({this.periodoId, this.categoriaId, this.eventoId});
+
+  @override
+  __VistaCursosState createState() => __VistaCursosState();
+}
+
+class __VistaCursosState extends State<_VistaCursos> {
+  List<dynamic>? cursosTopData;
+  List<dynamic>? ocupacionData;
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarTodosLosGraficos();
+  }
+
+  @override
+  void didUpdateWidget(_VistaCursos oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.periodoId != widget.periodoId ||
+        oldWidget.categoriaId != widget.categoriaId ||
+        oldWidget.eventoId != widget.eventoId) {
+      _cargarTodosLosGraficos();
+    }
+  }
+
+  Future<void> _cargarTodosLosGraficos() async {
+    setState(() => isLoading = true);
+
+    final responses = await Future.wait([
+      ApiService().getCursosTop(
+        periodoId: widget.periodoId,
+        categoriaId: widget.categoriaId,
+        eventoId: widget.eventoId,
+      ),
+      ApiService().getCursosOcupacion(
+        periodoId: widget.periodoId,
+        categoriaId: widget.categoriaId,
+        eventoId: widget.eventoId,
+      ),
+    ]);
+
+    if (mounted) {
+      setState(() {
+        cursosTopData = responses[0];
+        ocupacionData = responses[1];
+        isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading)
+      return Center(child: CircularProgressIndicator(color: AppTheme.primary));
+
+    return RefreshIndicator(
+      onRefresh: _cargarTodosLosGraficos,
+      color: AppTheme.primary,
+      child: ListView(
+        padding: const EdgeInsets.all(20.0),
+        physics: AlwaysScrollableScrollPhysics(),
+        children: [
+          _construirGraficoCursosTop(),
+          SizedBox(height: 24),
+          _construirGraficoOcupacion(),
+        ],
+      ),
+    );
+  }
+
+  // GRÁFICO 1: Barras (Alumnos por Curso)
+  Widget _construirGraficoCursosTop() {
+    if (cursosTopData == null || cursosTopData!.isEmpty)
+      return SizedBox.shrink();
+
+    double maxTotal = 0;
+    for (var item in cursosTopData!) {
+      if (double.parse(item['total_alumnos'].toString()) > maxTotal) {
+        maxTotal = double.parse(item['total_alumnos'].toString());
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Top Cursos Demandados',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.textDark,
+          ),
+        ),
+        Text(
+          'Volumen de alumnos inscritos',
+          style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+        ),
+        SizedBox(height: 16),
+        Container(
+          height: 300,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.cardShadow,
+                blurRadius: 15,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
+          padding: EdgeInsets.only(right: 20, left: 10, top: 30, bottom: 15),
+          child: BarChart(
+            BarChartData(
+              alignment: BarChartAlignment.spaceAround,
+              maxY: maxTotal == 0 ? 10 : maxTotal * 1.2,
+              barTouchData: BarTouchData(enabled: false),
+              titlesData: FlTitlesData(
+                rightTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                topTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 30,
+                    getTitlesWidget: (value, meta) {
+                      if (value == 0 || value % 1 != 0) return Text('');
+                      return Text(
+                        value.toInt().toString(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppTheme.textMuted,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    getTitlesWidget: (double value, TitleMeta meta) {
+                      int index = value.toInt();
+                      if (index >= 0 && index < cursosTopData!.length) {
+                        String nombreCorto = cursosTopData![index]['curso']
+                            .toString();
+                        if (nombreCorto.length > 8)
+                          nombreCorto = nombreCorto.substring(0, 8) + '...';
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(
+                            nombreCorto,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textDark,
+                            ),
+                          ),
+                        );
+                      }
+                      return Text('');
+                    },
+                  ),
+                ),
+              ),
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                getDrawingHorizontalLine: (value) =>
+                    FlLine(color: Colors.grey[200], strokeWidth: 1),
+              ),
+              borderData: FlBorderData(show: false),
+              barGroups: cursosTopData!.asMap().entries.map((e) {
+                return BarChartGroupData(
+                  x: e.key,
+                  barRods: [
+                    BarChartRodData(
+                      toY: double.parse(e.value['total_alumnos'].toString()),
+                      color: AppTheme.primary,
+                      width: 25,
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(6),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // GRÁFICO 2: Barras de Progreso Analíticas (Tasa de Ocupación)
+  Widget _construirGraficoOcupacion() {
+    if (ocupacionData == null || ocupacionData!.isEmpty)
+      return SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Tasa de Ocupación (Aforo)',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.textDark,
+          ),
+        ),
+        Text(
+          'Inscritos vs Aforo Máximo Permitido',
+          style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+        ),
+        SizedBox(height: 16),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.cardShadow,
+                blurRadius: 15,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
+          padding: EdgeInsets.all(20),
+          child: Column(
+            children: ocupacionData!.map((item) {
+              double inscritos = double.parse(item['inscritos'].toString());
+              double aforo = double.parse(item['aforo_total'].toString());
+              double porcentaje = aforo > 0 ? (inscritos / aforo) : 0;
+              if (porcentaje > 1.0)
+                porcentaje =
+                    1.0; // Evitar que la barra desborde si hay sobreventa
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item['curso'].toString(),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textDark,
+                              fontSize: 13,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          '${inscritos.toInt()} / ${aforo.toInt()} alu.',
+                          style: TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: LinearProgressIndicator(
+                        value: porcentaje,
+                        minHeight: 10,
+                        backgroundColor: AppTheme.primary.withValues(
+                          alpha: 0.1,
+                        ),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          porcentaje >= 0.9 ? Colors.green : AppTheme.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// Sub-widget para la vista de Métricas de Clientes
+class _VistaClientes extends StatefulWidget {
+  final int? periodoId;
+  const _VistaClientes({this.periodoId});
+
+  @override
+  __VistaClientesState createState() => __VistaClientesState();
+}
+
+class __VistaClientesState extends State<_VistaClientes> {
+  List<dynamic>? distritosData;
+  List<dynamic>? evolucionData;
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarTodosLosGraficos();
+  }
+
+  @override
+  void didUpdateWidget(_VistaClientes oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.periodoId != widget.periodoId) {
+      _cargarTodosLosGraficos();
+    }
+  }
+
+  Future<void> _cargarTodosLosGraficos() async {
+    setState(() => isLoading = true);
+
+    final responses = await Future.wait([
+      ApiService().getClientesPorDistrito(periodoId: widget.periodoId),
+      ApiService().getClientesEvolucion(),
+    ]);
+
+    if (mounted) {
+      setState(() {
+        distritosData = responses[0];
+        evolucionData = responses[1];
+        isLoading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading)
+      return Center(child: CircularProgressIndicator(color: AppTheme.primary));
+
+    return RefreshIndicator(
+      onRefresh: _cargarTodosLosGraficos,
+      color: AppTheme.primary,
+      child: ListView(
+        padding: const EdgeInsets.all(20.0),
+        physics: AlwaysScrollableScrollPhysics(),
+        children: [
+          _construirGraficoEvolucion(),
+          SizedBox(height: 24),
+          _construirGraficoDistritos(),
+        ],
+      ),
+    );
+  }
+
+  // GRÁFICO 1: Área (Evolución de Captación)
+  Widget _construirGraficoEvolucion() {
+    if (evolucionData == null || evolucionData!.isEmpty)
+      return SizedBox.shrink();
+
+    List<FlSpot> spots = [];
+    for (int i = 0; i < evolucionData!.length; i++) {
+      spots.add(
+        FlSpot(
+          i.toDouble(),
+          double.parse(evolucionData![i]['total'].toString()),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Evolución de Captación',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.textDark,
+          ),
+        ),
+        Text(
+          'Nuevos alumnos registrados por mes',
+          style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+        ),
+        SizedBox(height: 16),
+        Container(
+          height: 250,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.cardShadow,
+                blurRadius: 15,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
+          padding: EdgeInsets.only(right: 20, left: 10, top: 30, bottom: 15),
+          child: LineChart(
+            LineChartData(
+              gridData: FlGridData(show: false),
+              titlesData: FlTitlesData(
+                rightTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                topTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    interval: 1,
+                    getTitlesWidget: (value, meta) {
+                      int index = value.toInt();
+                      if (index >= 0 && index < evolucionData!.length) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(
+                            evolucionData![index]['mes'],
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textMuted,
+                            ),
+                          ),
+                        );
+                      }
+                      return Text('');
+                    },
+                  ),
+                ),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 35,
+                    getTitlesWidget: (value, meta) {
+                      if (value == 0 || value % 1 != 0) return Text('');
+                      return Text(
+                        value.toInt().toString(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppTheme.textMuted,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              borderData: FlBorderData(show: false),
+              lineBarsData: [
+                LineChartBarData(
+                  spots: spots,
+                  isCurved: true,
+                  color: AppTheme.primary,
+                  barWidth: 3,
+                  isStrokeCapRound: true,
+                  dotData: FlDotData(
+                    show: false,
+                  ), // Ocultamos los puntos para que se vea como un área suave
+                  belowBarData: BarAreaData(
+                    show: true,
+                    gradient: LinearGradient(
+                      colors: [
+                        AppTheme.primary.withValues(alpha: 0.3),
+                        AppTheme.primary.withValues(alpha: 0.0),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // GRÁFICO 2: Barras Horizontales (Top Distritos)
+  Widget _construirGraficoDistritos() {
+    if (distritosData == null || distritosData!.isEmpty)
+      return SizedBox.shrink();
+
+    double maxTotal = 0;
+    for (var item in distritosData!) {
+      if (double.parse(item['total'].toString()) > maxTotal)
+        maxTotal = double.parse(item['total'].toString());
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Distribución Geográfica',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.textDark,
+          ),
+        ),
+        Text(
+          'Top 5 distritos de procedencia',
+          style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+        ),
+        SizedBox(height: 16),
+        Container(
+          height: 300,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.cardShadow,
+                blurRadius: 15,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
+          padding: EdgeInsets.only(right: 20, left: 10, top: 30, bottom: 15),
+          child: BarChart(
+            BarChartData(
+              alignment: BarChartAlignment.spaceAround,
+              maxY: maxTotal == 0 ? 10 : maxTotal * 1.2,
+              barTouchData: BarTouchData(enabled: false),
+              titlesData: FlTitlesData(
+                rightTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                topTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 30,
+                    getTitlesWidget: (value, meta) {
+                      if (value == 0 || value % 1 != 0) return Text('');
+                      return Text(
+                        value.toInt().toString(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppTheme.textMuted,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    getTitlesWidget: (double value, TitleMeta meta) {
+                      int index = value.toInt();
+                      if (index >= 0 && index < distritosData!.length) {
+                        String nombreCorto = distritosData![index]['distrito']
+                            .toString();
+                        if (nombreCorto.length > 7)
+                          nombreCorto = nombreCorto.substring(0, 7) + '..';
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(
+                            nombreCorto,
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textDark,
+                            ),
+                          ),
+                        );
+                      }
+                      return Text('');
+                    },
+                  ),
+                ),
+              ),
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                getDrawingHorizontalLine: (value) =>
+                    FlLine(color: Colors.grey[200], strokeWidth: 1),
+              ),
+              borderData: FlBorderData(show: false),
+              barGroups: distritosData!.asMap().entries.map((e) {
+                return BarChartGroupData(
+                  x: e.key,
+                  barRods: [
+                    BarChartRodData(
+                      toY: double.parse(e.value['total'].toString()),
+                      color: AppTheme.primary,
+                      width: 25,
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(6),
+                      ),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
           ),
         ),
       ],

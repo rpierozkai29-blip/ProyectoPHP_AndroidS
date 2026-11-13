@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   // Reemplaza los X con tu IP local real
-  static const String baseUrl = 'http://10.13.210.225:8000/api';
+  static const String baseUrl = 'http://10.13.210.247:8000/api';
 
   Future<bool> login(String usuario, String password) async {
     try {
@@ -187,6 +187,99 @@ class ApiService {
 
       final response = await http.get(
         Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<List<dynamic>?> getCursosTop({
+    int? periodoId,
+    int? categoriaId,
+    int? eventoId,
+  }) async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('auth_token');
+      String url = '$baseUrl/dashboard/cursos-top?';
+      if (periodoId != null) url += 'periodo_id=$periodoId&';
+      if (categoriaId != null) url += 'categoria_id=$categoriaId&';
+      if (eventoId != null) url += 'evento_id=$eventoId&';
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<List<dynamic>?> getCursosOcupacion({
+    int? periodoId,
+    int? categoriaId,
+    int? eventoId,
+  }) async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('auth_token');
+      String url = '$baseUrl/dashboard/cursos-ocupacion?';
+      if (periodoId != null) url += 'periodo_id=$periodoId&';
+      if (categoriaId != null) url += 'categoria_id=$categoriaId&';
+      if (eventoId != null) url += 'evento_id=$eventoId&';
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<List<dynamic>?> getClientesPorDistrito({int? periodoId}) async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('auth_token');
+      String url = '$baseUrl/dashboard/clientes-distritos?';
+      if (periodoId != null) url += 'periodo_id=$periodoId&';
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+      if (response.statusCode == 200) return jsonDecode(response.body);
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<List<dynamic>?> getClientesEvolucion() async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString('auth_token');
+      final response = await http.get(
+        Uri.parse('$baseUrl/dashboard/clientes-evolucion'),
         headers: {
           'Authorization': 'Bearer $token',
           'Accept': 'application/json',
